@@ -42,7 +42,9 @@ type model struct {
 	username  string
 	state     viewState
 	selected  *GitHubItem
-	scrollPos int // for scrolling in detail view
+	scrollPos int  // for scrolling in detail view (vertical)
+	scrollCol int  // for horizontal scrolling in detail view
+	gPressed  bool // for detecting double-g (gg)
 }
 
 func getCurrentUser(token string) (string, error) {
@@ -196,16 +198,63 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch msg.String() {
 			case "esc", "q":
 				m.state = listView
+				m.gPressed = false
 				return m, nil
 			case "j", "down":
 				m.scrollPos++
+				m.gPressed = false
 				return m, nil
 			case "k", "up":
 				if m.scrollPos > 0 {
 					m.scrollPos--
 				}
+				m.gPressed = false
 				return m, nil
+			case "h", "left":
+				if m.scrollCol > 0 {
+					m.scrollCol--
+				}
+				m.gPressed = false
+				return m, nil
+			case "l", "right":
+				m.scrollCol++
+				m.gPressed = false
+				return m, nil
+			case "G":
+				// shift+g: go to bottom
+				if m.selected != nil {
+					descLines := strings.Split(m.selected.pr.Description, "\n")
+					_, height := 120, 20
+					if _, h, err := term.GetSize(int(os.Stdout.Fd())); err == nil {
+						if h > 5 {
+							height = h - 5
+						}
+					}
+					visibleLines := height - 8
+					if visibleLines < 1 {
+						visibleLines = 1
+					}
+					m.scrollPos = len(descLines) - visibleLines
+					if m.scrollPos < 0 {
+						m.scrollPos = 0
+					}
+				}
+				m.gPressed = false
+				return m, nil
+			case "g":
+				if m.gPressed {
+					// gg: go to top
+					m.scrollPos = 0
+					m.gPressed = false
+					return m, nil
+				}
+				m.gPressed = true
+				return m, nil
+			default:
+				m.gPressed = false
 			}
+		default:
+			m.gPressed = false
 		}
 		return m, nil
 	default:
@@ -222,15 +271,19 @@ func (m model) View() string {
 		return m.list.View()
 	case detailView:
 		if m.selected != nil {
-			// Prepare lines for detail view
-			height := 20
-			if _, h, err := term.GetSize(int(os.Stdout.Fd())); err == nil {
+			width, height := 120, 20
+			if w, h, err := term.GetSize(int(os.Stdout.Fd())); err == nil {
+				if w > 10 {
+					width = w - 5
+				}
 				if h > 5 {
 					height = h - 5
 				}
 			}
 			header := fmt.Sprintf("\n%s\n\n%s\n\n--- Description ---\n", m.selected.pr.Title, m.selected.pr.URL)
-			footer := "\n[Press q or esc to go back | j/down scroll | k/up scroll]"
+			rawFooter := "↑/k up • ↓/j down • ←/h left • →/l right • gg top • shift+g bottom • q/esc back"
+			footer := list.DefaultStyles().HelpStyle.Render(rawFooter) // Use DefaultStyles directly
+
 			descLines := strings.Split(m.selected.pr.Description, "\n")
 			visibleLines := height - 8 // header + footer + padding
 			if visibleLines < 1 {
@@ -247,8 +300,34 @@ func (m model) View() string {
 			if end > len(descLines) {
 				end = len(descLines)
 			}
-			view := header + strings.Join(descLines[start:end], "\n") + footer
-			return view
+			var visibleDesc []string
+			for _, line := range descLines[start:end] {
+				runes := []rune(line)
+				col := m.scrollCol
+				if col > len(runes) {
+					col = len(runes)
+				}
+				maxWidth := width
+				if maxWidth < 1 {
+					maxWidth = 1
+				}
+				endCol := col + maxWidth
+				if endCol > len(runes) {
+					endCol = len(runes)
+				}
+				visibleDesc = append(visibleDesc, string(runes[col:endCol]))
+			}
+			body := header + strings.Join(visibleDesc, "\n")
+
+			// Pad with blank lines so the footer is always at the bottom
+			bodyLines := strings.Count(body, "\n") + 1
+			footerLines := 1
+			totalLines := bodyLines + footerLines
+			if totalLines < height {
+				body += strings.Repeat("\n", height-totalLines)
+			}
+
+			return body + footer
 		}
 		return "[No PR selected]\n[Press q or esc to go back]"
 	default:
