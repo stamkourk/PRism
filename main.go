@@ -18,7 +18,7 @@ type PullRequest struct {
 	URL         string `json:"html_url"`
 	Repo        string
 	APIURL      string // Add API URL for getting PR details
-	Description string // PR body/description
+	Description string // PR description
 }
 
 type GitHubItem struct {
