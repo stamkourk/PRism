@@ -375,7 +375,7 @@ func main() {
 	}
 
 	p := tea.NewProgram(initialModel(items, username))
-	if err := p.Start(); err != nil {
+	if _, err := p.Run(); err != nil { // Use Run instead of Start
 		fmt.Println("Error running program:", err)
 		os.Exit(1)
 	}
