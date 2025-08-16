@@ -177,88 +177,103 @@ func (m model) Init() tea.Cmd {
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch m.state {
 	case listView:
-		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			switch msg.String() {
-			case "enter":
-				if sel, ok := m.list.SelectedItem().(GitHubItem); ok {
-					m.selected = &sel
-					m.state = detailView
-					m.scrollPos = 0 // reset scroll position
-				}
-				return m, nil
-			}
-		}
-		var cmd tea.Cmd
-		m.list, cmd = m.list.Update(msg)
-		return m, cmd
+		return m.updateListView(msg)
 	case detailView:
-		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			switch msg.String() {
-			case "esc", "q":
-				m.state = listView
-				m.gPressed = false
-				return m, nil
-			case "j", "down":
-				m.scrollPos++
-				m.gPressed = false
-				return m, nil
-			case "k", "up":
-				if m.scrollPos > 0 {
-					m.scrollPos--
-				}
-				m.gPressed = false
-				return m, nil
-			case "h", "left":
-				if m.scrollCol > 0 {
-					m.scrollCol--
-				}
-				m.gPressed = false
-				return m, nil
-			case "l", "right":
-				m.scrollCol++
-				m.gPressed = false
-				return m, nil
-			case "G":
-				// shift+g: go to bottom
-				if m.selected != nil {
-					descLines := strings.Split(m.selected.pr.Description, "\n")
-					_, height := 120, 20
-					if _, h, err := term.GetSize(int(os.Stdout.Fd())); err == nil {
-						if h > 5 {
-							height = h - 5
-						}
-					}
-					visibleLines := height - 8
-					if visibleLines < 1 {
-						visibleLines = 1
-					}
-					m.scrollPos = len(descLines) - visibleLines
-					if m.scrollPos < 0 {
-						m.scrollPos = 0
-					}
-				}
-				m.gPressed = false
-				return m, nil
-			case "g":
-				if m.gPressed {
-					// gg: go to top
-					m.scrollPos = 0
-					m.gPressed = false
-					return m, nil
-				}
-				m.gPressed = true
-				return m, nil
-			default:
-				m.gPressed = false
-			}
-		default:
-			m.gPressed = false
-		}
-		return m, nil
+		return m.updateDetailView(msg)
 	default:
 		return m, nil
+	}
+}
+
+func (m model) updateListView(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "enter":
+			if sel, ok := m.list.SelectedItem().(GitHubItem); ok {
+				m.selected = &sel
+				m.state = detailView
+				m.scrollPos = 0 // reset scroll position
+			}
+			return m, nil
+		}
+	}
+	var cmd tea.Cmd
+	m.list, cmd = m.list.Update(msg)
+	return m, cmd
+}
+
+func (m model) updateDetailView(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		return m.handleDetailKeyMsg(msg)
+	default:
+		m.gPressed = false
+	}
+	return m, nil
+}
+
+func (m model) handleDetailKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc", "q":
+		m.state = listView
+		m.gPressed = false
+		return m, nil
+	case "j", "down":
+		m.scrollPos++
+		m.gPressed = false
+		return m, nil
+	case "k", "up":
+		if m.scrollPos > 0 {
+			m.scrollPos--
+		}
+		m.gPressed = false
+		return m, nil
+	case "h", "left":
+		if m.scrollCol > 0 {
+			m.scrollCol--
+		}
+		m.gPressed = false
+		return m, nil
+	case "l", "right":
+		m.scrollCol++
+		m.gPressed = false
+		return m, nil
+	case "G":
+		m.scrollToBottom()
+		m.gPressed = false
+		return m, nil
+	case "g":
+		if m.gPressed {
+			m.scrollPos = 0
+			m.gPressed = false
+			return m, nil
+		}
+		m.gPressed = true
+		return m, nil
+	default:
+		m.gPressed = false
+	}
+	return m, nil
+}
+
+func (m *model) scrollToBottom() {
+	if m.selected != nil {
+		descLines := strings.Split(m.selected.pr.Description, "\n")
+		_, height := 120, 20
+		if _, h, err := term.GetSize(int(os.Stdout.Fd())); err == nil {
+			if h > 5 {
+				height = h - 5
+			}
+		}
+		visibleLines := height - 8
+		if visibleLines < 1 {
+			visibleLines = 1
+		}
+		m.scrollPos = len(descLines) - visibleLines
+		if m.scrollPos < 0 {
+			m.scrollPos = 0
+		}
 	}
 }
 
@@ -270,73 +285,102 @@ func (m model) View() string {
 	case listView:
 		return m.list.View()
 	case detailView:
-		if m.selected != nil {
-			width, height := 120, 20
-			if w, h, err := term.GetSize(int(os.Stdout.Fd())); err == nil {
-				if w > 10 {
-					width = w - 5
-				}
-				if h > 5 {
-					height = h - 5
-				}
-			}
-			header := fmt.Sprintf("\n%s\n\n%s\n\n--- Description ---\n", m.selected.pr.Title, m.selected.pr.URL)
-			rawFooter := "↑/k up • ↓/j down • ←/h left • →/l right • gg top • shift+g bottom • q/esc back"
-			footer := list.DefaultStyles().HelpStyle.Render(rawFooter) // Use DefaultStyles directly
-
-			descLines := strings.Split(m.selected.pr.Description, "\n")
-			visibleLines := height - 8 // header + footer + padding
-			if visibleLines < 1 {
-				visibleLines = 1
-			}
-			start := m.scrollPos
-			if start > len(descLines)-visibleLines {
-				start = len(descLines) - visibleLines
-			}
-			if start < 0 {
-				start = 0
-			}
-			end := start + visibleLines
-			if end > len(descLines) {
-				end = len(descLines)
-			}
-			var visibleDesc []string
-			for _, line := range descLines[start:end] {
-				runes := []rune(line)
-				col := m.scrollCol
-				if col > len(runes) {
-					col = len(runes)
-				}
-				maxWidth := width
-				if maxWidth < 1 {
-					maxWidth = 1
-				}
-				endCol := col + maxWidth
-				if endCol > len(runes) {
-					endCol = len(runes)
-				}
-				visibleDesc = append(visibleDesc, string(runes[col:endCol]))
-			}
-			body := header + strings.Join(visibleDesc, "\n")
-
-			// Pad with blank lines so the footer is always at the bottom
-			bodyLines := strings.Count(body, "\n") + 1
-			footerLines := 1
-			totalLines := bodyLines + footerLines
-			if totalLines < height {
-				body += strings.Repeat("\n", height-totalLines)
-			}
-
-			return body + footer
-		}
-		return "[No PR selected]\n[Press q or esc to go back]"
+		return m.renderDetailView()
 	default:
 		return ""
 	}
 }
 
+func (m model) renderDetailView() string {
+	if m.selected == nil {
+		return "[No PR selected]\n[Press q or esc to go back]"
+	}
+	width, height := getTerminalSize()
+	header := m.renderDetailHeader()
+	footer := m.renderDetailFooter()
+	visibleDesc := m.renderVisibleDescription(width, height)
+	body := header + visibleDesc
+
+	// Pad with blank lines so the footer is always at the bottom
+	bodyLines := strings.Count(body, "\n") + 1
+	footerLines := 1
+	totalLines := bodyLines + footerLines
+	if totalLines < height {
+		body += strings.Repeat("\n", height-totalLines)
+	}
+
+	return body + footer
+}
+
+func (m model) renderDetailHeader() string {
+	return fmt.Sprintf("\n%s\n\n%s\n\n--- Description ---\n", m.selected.pr.Title, m.selected.pr.URL)
+}
+
+func (m model) renderDetailFooter() string {
+	rawFooter := "↑/k up • ↓/j down • ←/h left • →/l right • gg top • shift+g bottom • q/esc back"
+	return list.DefaultStyles().HelpStyle.Render(rawFooter)
+}
+
+func (m model) renderVisibleDescription(width, height int) string {
+	descLines := strings.Split(m.selected.pr.Description, "\n")
+	visibleLines := height - 8 // header + footer + padding
+	if visibleLines < 1 {
+		visibleLines = 1
+	}
+	start, end := getVisibleLineRange(m.scrollPos, visibleLines, len(descLines))
+	var visibleDesc []string
+	for _, line := range descLines[start:end] {
+		visibleDesc = append(visibleDesc, getVisibleLine(line, m.scrollCol, width))
+	}
+	return strings.Join(visibleDesc, "\n")
+}
+
+func getTerminalSize() (int, int) {
+	width, height := 120, 20
+	if w, h, err := term.GetSize(int(os.Stdout.Fd())); err == nil {
+		if w > 10 {
+			width = w - 5
+		}
+		if h > 5 {
+			height = h - 5
+		}
+	}
+	return width, height
+}
+
+func getVisibleLineRange(scrollPos, visibleLines, totalLines int) (int, int) {
+	start := scrollPos
+	if start > totalLines-visibleLines {
+		start = totalLines - visibleLines
+	}
+	if start < 0 {
+		start = 0
+	}
+	end := start + visibleLines
+	if end > totalLines {
+		end = totalLines
+	}
+	return start, end
+}
+
+func getVisibleLine(line string, scrollCol, width int) string {
+	runes := []rune(line)
+	col := scrollCol
+	if col > len(runes) {
+		col = len(runes)
+	}
+	maxWidth := width
+	if maxWidth < 1 {
+		maxWidth = 1
+	}
+	endCol := col + maxWidth
+	if endCol > len(runes) {
+		endCol = len(runes)
+	}
+	return string(runes[col:endCol])
+}
+
 func main() {
-	// Remove config := loadConfig()
 	token := os.Getenv("GITHUB_TOKEN")
 	if token == "" {
 		log.Fatal("Error: GH_TOKEN environment variable is not set")
@@ -375,7 +419,7 @@ func main() {
 	}
 
 	p := tea.NewProgram(initialModel(items, username))
-	if _, err := p.Run(); err != nil { // Use Run instead of Start
+	if _, err := p.Run(); err != nil {
 		fmt.Println("Error running program:", err)
 		os.Exit(1)
 	}
