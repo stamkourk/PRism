@@ -31,7 +31,7 @@
 
 2. **Build the binary:**
    ```sh
-   go build -o prism main.go
+   go build -o prism
    ```
 
 3. **Set your GitHub token:**
