@@ -6,6 +6,7 @@ require (
 	github.com/charmbracelet/bubbles v0.21.0
 	github.com/charmbracelet/bubbletea v1.3.6
 	golang.org/x/term v0.34.0
+	gopkg.in/yaml.v2 v2.4.0
 )
 
 require (

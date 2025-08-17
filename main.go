@@ -7,9 +7,20 @@ import (
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
+	"gopkg.in/yaml.v2"
 )
 
+type Config struct {
+	DisableFilteringTeamPRs bool `yaml:"disableFilteringTeamPRs"`
+}
+
 func main() {
+	// Load config.yaml from current directory
+	cfg, err := loadConfig("config.yaml")
+	if err != nil {
+		log.Printf("Warning: could not load config.yaml: %v (using defaults)", err)
+	}
+
 	token := os.Getenv("GITHUB_TOKEN")
 	if token == "" {
 		log.Fatal("Error: GH_TOKEN environment variable is not set")
@@ -25,9 +36,12 @@ func main() {
 		log.Fatal("Error fetching review requests: ", err)
 	}
 
-	prs, skipped, err := filterDirectReviewRequests(prs, username, token)
-	if err != nil {
-		log.Fatal("Error filtering direct review requests: ", err)
+	skipped := 0
+	if !cfg.DisableFilteringTeamPRs {
+		prs, skipped, err = filterDirectReviewRequests(prs, username, token)
+		if err != nil {
+			log.Fatal("Error filtering direct review requests: ", err)
+		}
 	}
 
 	if len(prs) == 0 {
@@ -53,4 +67,16 @@ func main() {
 		fmt.Println("Error running program:", err)
 		os.Exit(1)
 	}
+}
+
+func loadConfig(path string) (Config, error) {
+	var cfg Config
+	f, err := os.Open(path)
+	if err != nil {
+		return cfg, err
+	}
+	defer f.Close()
+	decoder := yaml.NewDecoder(f)
+	err = decoder.Decode(&cfg)
+	return cfg, err
 }

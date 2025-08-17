@@ -7,7 +7,9 @@
 ## Features
 
 - 🚦 **See all PRs requesting your review**  
-  Instantly fetches open PRs where you are requested as a reviewer (not via team).
+  Instantly fetches open PRs where you are requested as a reviewer (either directly or via one of your teams).
+- ⚙️ Optional Team PR Filtering
+  Choose whether to include or exclude PRs assigned to your teams.
 - 🖱️ **Interactive TUI**  
   Navigate with arrow keys, filter with `/`, and select PRs with `Enter`.
 - 🔍 **Detailed PR View**  
@@ -16,8 +18,6 @@
   Press `q` or `esc` to return to the list view.
 - 📏 **Auto-resizing**  
   The UI adapts to your terminal size for optimal viewing.
-- ⚠️ **Error Reporting**  
-  Notifies you if any PRs could not be fetched due to API errors.
 
 ---
 
@@ -54,6 +54,28 @@ Simply run:
 - Press <kbd>Enter</kbd> to view PR details.
 - In detail view, scroll with <kbd>j</kbd>/<kbd>k</kbd> or <kbd>↓</kbd>/<kbd>↑</kbd>.
 - Press <kbd>q</kbd> or <kbd>esc</kbd> to return to the list.
+
+---
+
+## Configuration
+
+You can customize PRism’s behavior using a local config file `config.yaml`:
+
+🔧 `disableFilteringTeamPRs: false` (default)
+
+By default, PRism filters out PRs that were assigned to you via a team (e.g. @org/team-name) rather than directly to your GitHub username. This helps keep the list focused only on what explicitly needs your attention.
+
+To achieve this, PRism makes an additional API call per PR to check if you specifically were requested. While this provides more accurate filtering, it results in slower performance, especially if you have many PRs.
+
+💨 `disableFilteringTeamPRs: true`
+
+If you prefer speed over the extra filtering, you can set this flag to true. PRism will then skip the additional checks and simply list all PRs where you (or one of your teams) are listed as a reviewer.
+
+Tradeoff:
+
+✅ Faster execution
+
+⚠️ Less accurate filtering (you will see PRs not directly assigned to you)
 
 ---
 
