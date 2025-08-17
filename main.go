@@ -35,6 +35,7 @@ func main() {
 		if skipped > 0 {
 			fmt.Printf("⚠️  Could not fetch details for %d PR(s)\n", skipped)
 		}
+
 		return
 	}
 
